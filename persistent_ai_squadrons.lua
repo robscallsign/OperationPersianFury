@@ -1,3 +1,6 @@
+-- Persistent AI Squadron Strength
+-- Writes an inventory file that gets loaded at mission start
+
 local inventoryFile = 'inventory.lua'
 
 local function defaultInventory()
