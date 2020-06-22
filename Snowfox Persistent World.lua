@@ -1,5 +1,5 @@
 ----------------------------------------------------------
-SaveScheduleUnits = 30 --Seconds between each table write
+SaveScheduleUnits = 2 --Seconds between each table write
 ----------------------------------------------------------
   
 function IntegratedbasicSerialize(s)
@@ -72,28 +72,28 @@ end
 --////SAVE FUNCTION FOR UNITS
 function SEF_SaveUnitIntermentTable(timeloop, time)
 	IntermentMissionStr = IntegratedserializeWithCycles("SnowfoxUnitInterment", SnowfoxUnitInterment)
-	writemission(IntermentMissionStr, "SnowfoxUnitInterment.lua")
+	writemission(IntermentMissionStr, dbGroupFile)
 	--trigger.action.outText("Progress Has Been Saved", 15)	
-	HypeMan.sendBotMessage('Save unit handler')
+	HypeMan.sendDebugMessage('Save unit handler')
 	return time + SaveScheduleUnits
 end
 
 function SEF_SaveUnitIntermentTableNoArgs()
 	IntermentMissionStr = IntegratedserializeWithCycles("SnowfoxUnitInterment", SnowfoxUnitInterment)
-	writemission(IntermentMissionStr, "SnowfoxUnitInterment.lua")		
+	writemission(IntermentMissionStr, dbGroupFile)		
 end
 
 --////SAVE FUNCTION FOR STATICS
 function SEF_SaveStaticIntermentTable(timeloop, time)
 	IntermentMissionStrStatic = IntegratedserializeWithCycles("SnowfoxStaticInterment", SnowfoxStaticInterment)
-	writemission(IntermentMissionStrStatic, "SnowfoxStaticInterment.lua")
+	writemission(IntermentMissionStrStatic, dbStaticFile)
 	--trigger.action.outText("Progress Has Been Saved", 15)	
 	return time + SaveScheduleUnits
 end
 
 function SEF_SaveStaticIntermentTableNoArgs()
 	IntermentMissionStrStatic = IntegratedserializeWithCycles("SnowfoxStaticInterment", SnowfoxStaticInterment)
-	writemission(IntermentMissionStrStatic, "SnowfoxStaticInterment.lua")	
+	writemission(IntermentMissionStrStatic, dbStaticFile)	
 end
 
 -------------------------------------------------------------------------------------------------------------------------------------
@@ -103,11 +103,12 @@ SEFDeletedUnitCount = 0
 SEFDeletedStaticCount = 0
 
 --////LOAD UNITS
-if file_exists("SnowfoxUnitInterment.lua") then
+
+if file_exists(dbGroupFile) then
 	DeadUnitsList = SET_UNIT:New():FilterCoalitions("red"):FilterCategories("ground"):FilterActive(true):FilterStart()
 	DeadUnitsList:HandleEvent(EVENTS.Dead)
 	
-	dofile("SnowfoxUnitInterment.lua")
+	dofile(dbGroupFile)
 	
 	UnitIntermentTableLength = SEF_GetTableLength(SnowfoxUnitInterment)	
 	--trigger.action.outText("Unit Table Length Is "..UnitIntermentTableLength, 15)
@@ -126,13 +127,26 @@ else
 	DeadUnitsList = SET_UNIT:New():FilterCoalitions("red"):FilterCategories("ground"):FilterActive(true):FilterStart()
 	DeadUnitsList:HandleEvent(EVENTS.Dead)		
 	SnowfoxUnitInterment = {}	
-	UnitIntermentTableLength = 0	
+	UnitIntermentTableLength = 0
+  
+  for index in ipairs(locations) do
+    local grp = locations[index][2]
+        
+    for kk,dd in pairs(MyUnitList[grp]) do
+      UnitIntermentTableLength = UnitIntermentTableLength + 1
+      SnowfoxUnitInterment[UnitIntermentTableLength] = dd
+      HypeMan.sendDebugMessage('INIT: adding ' .. dd .. ' to the dead db.')
+    end
+    
+    Group.getByName(grp):destroy()
+  end  
+
 end
 --////LOAD STATICS
-if file_exists("SnowfoxStaticInterment.lua") then
+if file_exists(dbStaticFile) then
 	
-	dofile("SnowfoxStaticInterment.lua")
-		
+	dofile(dbStaticFile)
+
 	StaticIntermentTableLength = SEF_GetTableLength(SnowfoxStaticInterment)	
 	--trigger.action.outText("Static Table Length Is "..StaticIntermentTableLength, 15)
 	
@@ -160,7 +174,6 @@ timer.scheduleFunction(SEF_SaveUnitIntermentTable, 53, timer.getTime() + SaveSch
 timer.scheduleFunction(SEF_SaveStaticIntermentTable, 53, timer.getTime() + SaveScheduleUnits)
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------
-
 function DeadUnitsList:OnEventDead(EventData)
 
 	local DEADUNITNAME = EventData.IniDCSUnitName
@@ -181,15 +194,41 @@ function DeadUnitsList:OnEventDead(EventData)
 			if ( DEADUNITCATEGORY == 2 or DEADUNITCATEGORY == 3 ) then -- GROUND_UNIT or SHIP
 				UnitIntermentTableLength = UnitIntermentTableLength + 1				
 				SnowfoxUnitInterment[UnitIntermentTableLength] = DEADUNITNAME	
-				HypeMan.sendBotMessage('AI UNIT DEAD HANDLER RAN.')
+				HypeMan.sendDebugMessage('AI UNIT DEAD HANDLER RAN.')
 			else
 			end
 		elseif ( DEADUNITOBJECTCATEGORY == 3 ) then -- STATIC
 			StaticIntermentTableLength = StaticIntermentTableLength + 1			
 			SnowfoxStaticInterment[StaticIntermentTableLength] = DEADUNITNAME		
-			HypeMan.sendBotMessage('STATIC DEAD UNIT HANDLER RAN.')
+			HypeMan.sendDebugMessage('STATIC DEAD UNIT HANDLER RAN.')
 		else
 		end		
 	else
 	end
+end
+
+
+-- remove a unit from the table of destroyed units, effectively 'restoring' it
+-- this is called when the capture and hold mechanic switches and a group gets restored
+function DbRestoreUnit(UnitName)
+  for k, nn in ipairs(SnowfoxUnitInterment) do
+    
+    if nn == UnitName then     
+      HypeMan.sendDebugMessage('Removed unit: ' .. SnowfoxUnitInterment[k])
+        
+        -- TODO need to speed this table remove call:
+        -- https://stackoverflow.com/questions/12394841/safely-remove-items-from-an-array-table-while-iterating
+      table.remove(SnowfoxUnitInterment,k)
+      UnitIntermentTableLength = UnitIntermentTableLength - 1      
+      return
+    end
+  end
+end
+
+function DbRestoreGroup(GroupName)
+  local u = MyUnitList[GroupName]
+  
+  for i,d in pairs(u) do
+    DbRestoreUnit(d)
+  end
 end
